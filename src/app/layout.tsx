@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
-import dynamic from 'next/dynamic';
-
-const Sidebar = dynamic(() => import('@/components/Sidebar'), { ssr: false });
-const NotificationManager = dynamic(() => import('@/components/NotificationManager'), { ssr: false });
+import ClientWrapper from "@/components/ClientWrapper";
 
 export const metadata: Metadata = {
   title: "DCN Content CMS - Phiên bản MMO",
@@ -18,13 +15,9 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <div className="layout-grid">
-          <Sidebar />
-          <main style={{ padding: 'var(--spacing-xl)', overflowY: 'auto' }}>
-            {children}
-          </main>
-        </div>
-        <NotificationManager />
+        <ClientWrapper>
+          {children}
+        </ClientWrapper>
       </body>
     </html>
   );
