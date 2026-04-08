@@ -318,7 +318,7 @@ export default function AccountsPage() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '0.9rem', marginBottom: '8px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Key size={14} /> API Key / Access Token
                 </label>
                 <input 
