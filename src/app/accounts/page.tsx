@@ -12,7 +12,7 @@ export default function AccountsPage() {
   const [newAccount, setNewAccount] = useState({
     name: '',
     platform: 'tiktok' as Platform,
-    status: 'active' as const,
+    status: 'active' as Account['status'],
     profileUrl: '',
     notes: '',
     apiKey: ''
