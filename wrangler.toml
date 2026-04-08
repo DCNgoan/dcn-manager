@@ -1,0 +1,14 @@
+name = "dcn-manager"
+pages_build_output_dir = ".vercel/output/static"
+
+[vars]
+# Configuration variables can be added here if needed in the future
+
+[[kv_namespaces]]
+# Add KV namespaces if needed
+
+[[r2_buckets]]
+# Add R2 buckets if needed
+
+[[d1_databases]]
+# Add D1 databases if needed
