@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getContent, type ContentItem } from '@/lib/content';
+import { getContent, markAsPosted, deleteContent, type ContentItem } from '@/lib/content';
 import { getAccounts, type Account } from '@/lib/accounts';
 import { useParams } from 'next/navigation';
-import { Copy, ExternalLink, User, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { Copy, ExternalLink, User, Calendar, Clock, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
 
 export default function PlatformPage() {
   const params = useParams();
