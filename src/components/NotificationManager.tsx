@@ -77,9 +77,19 @@ export default function NotificationManager() {
         const notifiedSet = new Set(notifiedIds);
         
         const now = Date.now();
-        const toNotify = items.filter(item => 
-          item.status === 'scheduled' && 
-          item.scheduledAt && item.scheduledAt <= now &&
+        const scheduledItems = items.filter(item => item.status === 'scheduled' && item.scheduledAt);
+        
+        // Log status if we have scheduled items
+        if (scheduledItems.length > 0 && Math.random() > 0.7) { 
+           const nextItem = [...scheduledItems].sort((a,b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))[0];
+           if (nextItem.scheduledAt && nextItem.scheduledAt > now) {
+             const diff = Math.ceil((nextItem.scheduledAt - now) / 1000);
+             addLog(`🕒 Đợi bài tiếp theo: ${diff}s nữa...`);
+           }
+        }
+
+        const toNotify = scheduledItems.filter(item => 
+          item.scheduledAt! <= now &&
           !notifiedSet.has(item.id)
         );
 
@@ -113,7 +123,6 @@ export default function NotificationManager() {
     };
 
     // Thêm listener để clear notifiedIds khi có bài mới cập nhật scheduledAt
-    // (Thực tế là khi status scheduled và scheduledAt > now, chúng ta nên gỡ khỏi notifiedSet)
     const syncNotifiedList = async () => {
       try {
         const items = await getContent();
@@ -122,11 +131,11 @@ export default function NotificationManager() {
         let notifiedIds: string[] = JSON.parse(stored);
         const initialCount = notifiedIds.length;
         
-        // Nếu bài viết được dời lịch vào tương lai, cho phép nó được thông báo lại
         notifiedIds = notifiedIds.filter(id => {
           const item = items.find(i => i.id === id);
-          if (!item) return false; // Bài đã xóa
-          if (item.status === 'scheduled' && item.scheduledAt && item.scheduledAt > Date.now()) return false;
+          if (!item) return false; 
+          // Nếu bài viết được dời lịch vào tương lai (> 2 phút từ bây giờ), cho phép nó được thông báo lại
+          if (item.status === 'scheduled' && item.scheduledAt && item.scheduledAt > (Date.now() + 120000)) return false;
           return true;
         });
 
@@ -137,8 +146,8 @@ export default function NotificationManager() {
     };
 
     check();
-    const interval = setInterval(check, 15000);
-    const syncInterval = setInterval(syncNotifiedList, 60000); // 1 phút đồng bộ lock list 1 lần
+    const interval = setInterval(check, 10000); // Kiểm tra mỗi 10 giây cho nhạy
+    const syncInterval = setInterval(syncNotifiedList, 30000); // 30s đồng bộ 1 lần
 
     return () => {
       clearInterval(interval);
