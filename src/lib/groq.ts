@@ -1,9 +1,9 @@
 import { getSettings } from './settings';
 
-export const generateGroqContent = async (prompt: string, platform: string): Promise<string> => {
-  const { groqKey } = await getSettings();
+export const generateGroqContent = async (prompt: string, platform: string, userId: string): Promise<string> => {
+  const { groqKey } = await getSettings(userId);
   if (!groqKey) {
-    throw new Error('Groq API Key không tìm thấy. Vui lòng thêm trong phần Cài đặt.');
+    throw new Error('Chưa cấu hình Groq API Key. Vui lòng vào Cài đặt.');
   }
 
   // Sử dụng endpoint tương thích OpenAI của Groq

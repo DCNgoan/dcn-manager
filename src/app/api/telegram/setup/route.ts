@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 import { getSettings } from '@/lib/settings';
 
 const DEFAULT_TELEGRAM_TOKEN = '8249291269:AAGnxpauMw8hQf7q9FJXTiZi_kJolLs87HI';
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const settings = await getSettings();
+    const settings = await getSettings('app_settings');
     const token = settings.telegramToken || DEFAULT_TELEGRAM_TOKEN;
     const response = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
     const result = await response.json();

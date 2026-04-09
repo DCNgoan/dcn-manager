@@ -1,9 +1,9 @@
 import { getSettings } from './settings';
 
-export const generateOpenAIContent = async (prompt: string, platform: string): Promise<string> => {
-  const { openaiKey } = await getSettings();
+export const generateOpenAIContent = async (prompt: string, platform: string, userId: string): Promise<string> => {
+  const { openaiKey } = await getSettings(userId);
   if (!openaiKey) {
-    throw new Error('OpenAI API Key không tìm thấy. Vui lòng thêm trong phần Cài đặt.');
+    throw new Error('Chưa cấu hình OpenAI API Key. Vui lòng vào Cài đặt.');
   }
 
   const endpoint = 'https://api.openai.com/v1/chat/completions';

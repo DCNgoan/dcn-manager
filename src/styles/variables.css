@@ -29,6 +29,13 @@
   /* Transitions */
   --transition-fast: 0.2s ease;
   --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Breakpoints */
+  --breakpoint-mobile: 768px;
+  --breakpoint-tablet: 1024px;
+
+  /* Sidebar */
+  --sidebar-width: 280px;
 }
 
 @media (prefers-color-scheme: light) {

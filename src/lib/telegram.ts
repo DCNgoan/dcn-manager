@@ -23,7 +23,7 @@ export async function sendTelegramMessage(chatId: string, text: string, replyMar
   }
 }
 
-export async function sendPostReminder(chatId: string, item: { id: string; title: string; body: string; platform: string; mediaUrl?: string }, token?: string) {
+export async function sendPostReminder(chatId: string, item: { id: string; title: string; body: string; platform: string; mediaUrl?: string }, token?: string, userId?: string) {
   const message = `
 <b>🔔 NHẮC LỊCH ĐĂNG BÀI (Còn 15 phút)</b>
 
@@ -41,10 +41,10 @@ ${item.mediaUrl ? `<b>🔗 Media:</b> <a href="${item.mediaUrl}">Mở link Drive
   const replyMarkup = {
     inline_keyboard: [
       [
-        { text: '✅ Xác nhận đã đăng', callback_data: `confirm_posted:${item.id}` },
+        { text: '✅ Xác nhận đã đăng', callback_data: `confirm_posted:${item.id}:${userId || 'anon'}` },
       ],
       [
-        { text: '⏰ Nhắc lại sau 5 phút', callback_data: `remind_later:${item.id}` }
+        { text: '⏰ Nhắc lại sau 5 phút', callback_data: `remind_later:${item.id}:${userId || 'anon'}` }
       ]
     ]
   };

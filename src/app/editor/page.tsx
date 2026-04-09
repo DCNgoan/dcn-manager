@@ -7,9 +7,15 @@ import { generateAIContent } from '@/lib/gemini';
 import { generateOpenAIContent } from '@/lib/openai';
 import { generateGroqContent } from '@/lib/groq';
 import MediaPreview from '@/components/MediaPreview';
-import { Save, Calendar, Link as LinkIcon, AlertCircle, CheckCircle2, Sparkles, Loader2, Zap } from 'lucide-react';
+import { Save, Calendar, Link as LinkIcon, AlertCircle, CheckCircle2, Sparkles, Loader2, Zap, Edit3 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { getContentItem, updateContent } from '@/lib/content';
 
 export default function EditorPage() {
+  const { userMetadata } = useAuth();
+  const toast = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [formData, setFormData] = useState({
     title: '',
@@ -17,9 +23,13 @@ export default function EditorPage() {
     platform: 'tiktok' as Platform,
     accountId: '',
     mediaUrl: '',
-    status: 'draft' as ContentStatus,
+    status: 'scheduled' as ContentStatus,
     scheduledAt: ''
   });
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const editingId = searchParams.get('id');
+  
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiModel, setAiModel] = useState<'gemini' | 'openai' | 'groq'>('gemini');
   const [mounted, setMounted] = useState(false);
@@ -28,16 +38,43 @@ export default function EditorPage() {
 
   useEffect(() => {
     setMounted(true);
+    if (!userMetadata) return;
+
     const fetchAccounts = async () => {
-      const accs = await getAccounts();
+      const accs = await getAccounts(userMetadata.uid);
       setAccounts(accs);
-      if (accs.length > 0 && !formData.accountId) {
+      
+      // Seed accountId if not editing or if freshly loaded
+      if (accs.length > 0 && !formData.accountId && !editingId) {
         const firstMatch = accs.find(a => a.platform === formData.platform);
         if (firstMatch) setFormData(prev => ({ ...prev, accountId: firstMatch.id }));
       }
     };
+
+    const fetchEditingItem = async () => {
+      if (!editingId) return;
+      try {
+        const item = await getContentItem(editingId);
+        if (item) {
+          setFormData({
+            title: item.title,
+            body: item.body,
+            platform: item.platform,
+            accountId: item.accountId,
+            mediaUrl: item.mediaUrl || '',
+            status: item.status,
+            scheduledAt: item.scheduledAt ? new Date(item.scheduledAt).toISOString().slice(0, 16) : ''
+          });
+        }
+      } catch (err) {
+        console.error("Error loading item for edit:", err);
+        setMessage({ type: 'error', text: 'Không thể tải bài viết để chỉnh sửa.' });
+      }
+    };
+
     fetchAccounts();
-  }, [formData.platform]);
+    fetchEditingItem();
+  }, [formData.platform, userMetadata, editingId]);
 
   if (!mounted) return null;
 
@@ -54,36 +91,49 @@ export default function EditorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.body || !formData.accountId) {
-      setMessage({ type: 'error', text: 'Vui lòng điền đầy đủ thông tin bắt buộc.' });
+      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc.');
       return;
     }
 
     setIsSaving(true);
     try {
-      await saveContent({
+      if (!userMetadata) throw new Error("Chưa đăng nhập");
+      
+      const contentPayload = {
         title: formData.title,
         body: formData.body,
         platform: formData.platform,
         accountId: formData.accountId,
         mediaUrl: formData.mediaUrl,
         status: formData.status,
-        scheduledAt: formData.scheduledAt ? new Date(formData.scheduledAt).getTime() : undefined
-      });
+        scheduledAt: formData.scheduledAt 
+          ? new Date(formData.scheduledAt).getTime() 
+          : Date.now(), // Default to now if no date selected
+        userId: userMetadata?.uid || ''
+      };
 
-      setMessage({ type: 'success', text: 'Nội dung đã được lưu lên Firebase!' });
-      setFormData({
-        title: '',
-        body: '',
-        platform: 'tiktok',
-        accountId: '',
-        mediaUrl: '',
-        status: 'draft',
-        scheduledAt: ''
-      });
+      if (editingId) {
+        await updateContent(editingId, contentPayload);
+        toast.success('Hệ thống: Đã cập nhật xong bài viết!');
+      } else {
+        await saveContent(contentPayload);
+        toast.success('Hệ thống: Đã lên lịch thành công!');
+        setFormData({
+          title: '',
+          body: '',
+          platform: 'tiktok',
+          accountId: '',
+          mediaUrl: '',
+          status: 'scheduled',
+          scheduledAt: ''
+        });
+      }
       
-      setTimeout(() => setMessage(null), 3000);
+      if (editingId) {
+        setTimeout(() => router.push('/library'), 1000);
+      }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Lưu nội dung thất bại: ' + (error as Error).message });
+      toast.error('Có lỗi xảy ra khi lưu bài.');
     } finally {
       setIsSaving(false);
     }
@@ -91,22 +141,22 @@ export default function EditorPage() {
 
   const handleAiGenerate = async () => {
     if (!formData.title) {
-      setMessage({ type: 'error', text: 'Please enter a Topic in the Title field first.' });
+      toast.error('Please enter a Topic in the Title field first.');
       return;
     }
 
     setIsAiLoading(true);
-    setMessage(null);
     try {
       let result = '';
       let usedModel = aiModel;
 
       try {
+        if (!userMetadata) throw new Error("Chưa đăng nhập");
         result = aiModel === 'gemini' 
-          ? await generateAIContent(formData.title, formData.platform)
+          ? await generateAIContent(formData.title, formData.platform, userMetadata.uid)
           : aiModel === 'openai'
-            ? await generateOpenAIContent(formData.title, formData.platform)
-            : await generateGroqContent(formData.title, formData.platform);
+            ? await generateOpenAIContent(formData.title, formData.platform, userMetadata.uid)
+            : await generateGroqContent(formData.title, formData.platform, userMetadata.uid);
       } catch (firstErr: any) {
         // Fallback logic for quota errors
         console.warn('First AI attempt failed, trying fallback...', firstErr);
@@ -119,13 +169,13 @@ export default function EditorPage() {
           if (aiModel === 'openai') fallbackModel = 'groq';
           if (aiModel === 'groq') fallbackModel = 'gemini';
           
-          setMessage({ type: 'error', text: `${aiModel.toUpperCase()} đang gặp lỗi, đang thử dự phòng bằng ${fallbackModel.toUpperCase()}...` });
+          toast.error(`${aiModel.toUpperCase()} đang gặp lỗi, đang thử dự phòng bằng ${fallbackModel.toUpperCase()}...`);
           
           result = fallbackModel === 'gemini'
-            ? await generateAIContent(formData.title, formData.platform)
+            ? await generateAIContent(formData.title, formData.platform, userMetadata?.uid || '')
             : fallbackModel === 'openai'
-              ? await generateOpenAIContent(formData.title, formData.platform)
-              : await generateGroqContent(formData.title, formData.platform);
+              ? await generateOpenAIContent(formData.title, formData.platform, userMetadata?.uid || '')
+              : await generateGroqContent(formData.title, formData.platform, userMetadata?.uid || '');
           
           usedModel = fallbackModel;
           setAiModel(fallbackModel);
@@ -135,13 +185,13 @@ export default function EditorPage() {
       }
       
       setFormData(prev => ({ ...prev, body: result }));
-      setMessage({ type: 'success', text: `AI (${usedModel === 'gemini' ? 'Gemini' : 'ChatGPT'}) đã tạo nội dung thành công!` });
+      toast.success(`AI (${usedModel === 'gemini' ? 'Gemini' : 'ChatGPT'}) đã tạo nội dung thành công!`);
     } catch (err: any) {
       let friendlyError = err.message || 'AI không thể tạo nội dung lúc này.';
       if (friendlyError.includes('quota')) {
         friendlyError = 'Cả 2 AI đều đang hết hạn mức miễn phí. Vui lòng thử lại sau 1 phút hoặc kiểm tra số dư tài khoản.';
       }
-      setMessage({ type: 'error', text: friendlyError });
+      toast.error(friendlyError);
     } finally {
       setIsAiLoading(false);
     }
@@ -150,63 +200,51 @@ export default function EditorPage() {
   const filteredAccounts = accounts.filter(a => a.platform === formData.platform);
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <header style={{ marginBottom: 'var(--spacing-xl)' }}>
-        <h1 className="heading-font" style={{ fontSize: '2rem', fontWeight: 700 }}>Soạn thảo Nội dung</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Sáng tạo và lên lịch các bài viết viral của bạn.</p>
+    <div className="responsive-container" style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <header className="responsive-header" style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <h1 className="heading-font responsive-title" style={{ fontWeight: 700 }}>
+          {editingId ? 'Chỉnh sửa Nội dung' : 'Soạn thảo Nội dung'}
+        </h1>
+        <p className="responsive-subtitle" style={{ color: 'var(--text-secondary)' }}>
+          {editingId ? 'Cập nhật lại bài viết viral của bạn.' : 'Sáng tạo và lên lịch các bài viết viral của bạn.'}
+        </p>
       </header>
 
-      {message && (
-        <div style={{ 
-          padding: '16px', 
-          borderRadius: '12px', 
-          backgroundColor: message.type === 'success' ? 'rgba(37, 244, 238, 0.1)' : 'rgba(254, 44, 85, 0.1)',
-          color: message.type === 'success' ? 'var(--color-tiktok-cyan)' : 'var(--color-tiktok-pink)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          marginBottom: 'var(--spacing-lg)',
-          border: `1px solid ${message.type === 'success' ? 'var(--color-tiktok-cyan)' : 'var(--color-tiktok-pink)'}`
-        }}>
-          {message.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-          {message.text}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 'var(--spacing-xl)' }}>
+      <form onSubmit={handleSubmit} className="responsive-grid-2">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' }}>
           {/* Main Editor */}
           <div className="glass glass-card" style={{ padding: 'var(--spacing-xl)' }}>
             <input 
               type="text" 
-              placeholder="Tiêu đề bài viết (Dùng để quản lý nội bộ)"
+              placeholder="Tiêu đề bài viết..."
               value={formData.title}
               onChange={e => setFormData({...formData, title: e.target.value})}
-              style={{ width: '100%', fontSize: '1.5rem', fontWeight: 700, background: 'transparent', border: 'none', color: 'white', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '12px' }}
-              className="heading-font"
+              style={{ width: '100%', fontWeight: 700, background: 'transparent', border: 'none', color: 'white', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '12px' }}
+              className="heading-font responsive-editor-title"
             />
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)' }}>
+            <div className="ai-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', flexWrap: 'wrap', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Zap size={18} color={aiModel === 'gemini' ? 'var(--accent-primary)' : '#10a37f'} />
-                <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Công cụ AI:</span>
+                <span className="hidden-mobile" style={{ fontSize: '0.9rem', fontWeight: 600 }}>Công cụ AI:</span>
                 <select 
                   value={aiModel}
-                  onChange={e => setAiModel(e.target.value as 'gemini' | 'openai')}
+                  onChange={e => setAiModel(e.target.value as 'gemini' | 'openai' | 'groq')}
                   style={{ 
-                    padding: '6px 12px', 
+                    padding: '8px 12px', 
                     borderRadius: '8px', 
                     backgroundColor: 'var(--bg-primary)', 
                     color: 'white',
                     border: '1px solid var(--glass-border)',
                     fontSize: '0.85rem',
                     outline: 'none',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    minWidth: '140px'
                   }}
                 >
-                  <option value="gemini" style={{ backgroundColor: 'var(--bg-primary)' }}>Google Gemini (Flash)</option>
-                  <option value="openai" style={{ backgroundColor: 'var(--bg-primary)' }}>ChatGPT (GPT-4o Mini)</option>
-                  <option value="groq" style={{ backgroundColor: 'var(--bg-primary)' }}>Groq Llama 3 (Siêu nhanh)</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">ChatGPT API</option>
+                  <option value="groq">Groq (Nhanh)</option>
                 </select>
               </div>
               
@@ -214,23 +252,21 @@ export default function EditorPage() {
                 type="button" 
                 onClick={handleAiGenerate}
                 disabled={isAiLoading}
+                className="ai-gen-btn"
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
+                  justifyContent: 'center',
                   gap: '8px', 
-                  padding: '8px 20px', 
+                  padding: '10px 24px', 
                   borderRadius: '10px', 
                   backgroundColor: aiModel === 'gemini' ? 'var(--accent-primary)' : aiModel === 'openai' ? '#10a37f' : '#f55036', 
                   color: 'white',
                   border: 'none',
                   fontSize: '0.9rem',
                   fontWeight: 700,
-                  cursor: isAiLoading ? 'not-allowed' : 'pointer',
-                  boxShadow: `0 4px 12px ${aiModel === 'gemini' ? 'rgba(124, 58, 237, 0.3)' : aiModel === 'openai' ? 'rgba(16, 163, 127, 0.3)' : 'rgba(245, 80, 54, 0.3)'}`,
-                  transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                  cursor: isAiLoading ? 'not-allowed' : 'pointer'
                 }}
-                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
-                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
               >
                 {isAiLoading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
                 {isAiLoading ? 'AI đang viết...' : '✨ Viết bài ngay'}
@@ -324,10 +360,8 @@ export default function EditorPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <button 
               type="submit"
-              onClick={() => setFormData(prev => ({ ...prev, status: formData.scheduledAt ? 'scheduled' : 'draft' }))}
               disabled={isSaving}
               style={{ 
                 width: '100%', 
@@ -343,10 +377,9 @@ export default function EditorPage() {
                 cursor: isSaving ? 'not-allowed' : 'pointer'
               }}
             >
-              {isSaving ? <Loader2 size={18} className="animate-spin" /> : (formData.scheduledAt ? <Calendar size={18} /> : <Save size={18} />)}
-              {isSaving ? 'Đang lưu...' : (formData.scheduledAt ? 'Đặt lịch đăng' : 'Lưu bản nháp')}
+              {isSaving ? <Loader2 size={18} className="animate-spin" /> : (editingId ? <Edit3 size={18} /> : <Calendar size={18} />)}
+              {isSaving ? 'Đang lưu...' : (editingId ? 'Cập nhật nội dung' : 'Lên lịch đăng bài')}
             </button>
-          </div>
         </div>
       </form>
     </div>

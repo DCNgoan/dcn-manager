@@ -1,9 +1,9 @@
 import { getSettings } from './settings';
 
-export const generateAIContent = async (prompt: string, platform: string): Promise<string> => {
-  const { geminiKey } = await getSettings();
+export const generateAIContent = async (prompt: string, platform: string, userId: string): Promise<string> => {
+  const { geminiKey } = await getSettings(userId);
   if (!geminiKey) {
-    throw new Error('Gemini API Key not found. Please add it in Settings.');
+    throw new Error('Chưa cấu hình Gemini API Key. Vui lòng vào Cài đặt.');
   }
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;

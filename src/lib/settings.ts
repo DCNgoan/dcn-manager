@@ -14,11 +14,10 @@ export interface AppSettings {
 }
 
 const COLLECTION_NAME = 'settings';
-const DOCUMENT_ID = 'app_settings';
 
-export const getSettings = async (): Promise<AppSettings> => {
+export const getSettings = async (userId: string): Promise<AppSettings> => {
   try {
-    const docRef = doc(db, COLLECTION_NAME, DOCUMENT_ID);
+    const docRef = doc(db, COLLECTION_NAME, userId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       return docSnap.data() as AppSettings;
@@ -29,9 +28,9 @@ export const getSettings = async (): Promise<AppSettings> => {
   return {};
 };
 
-export const saveSettings = async (settings: AppSettings): Promise<void> => {
+export const saveSettings = async (userId: string, settings: AppSettings): Promise<void> => {
   const savePromise = (async () => {
-    const docRef = doc(db, COLLECTION_NAME, DOCUMENT_ID);
+    const docRef = doc(db, COLLECTION_NAME, userId);
     await setDoc(docRef, settings, { merge: true });
   })();
 

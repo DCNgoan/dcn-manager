@@ -4,24 +4,36 @@ import React, { useState, useEffect } from 'react';
 import { getContent, deleteContent, markAsPosted, type ContentItem } from '@/lib/content';
 import { getAccounts, type Account } from '@/lib/accounts';
 import MediaPreview from '@/components/MediaPreview';
-import { Copy, ExternalLink, Trash2, Calendar as CalIcon, Filter, Clock, MoreVertical, Edit, Play, ChevronUp, CheckCircle2 } from 'lucide-react';
+import { Copy, ExternalLink, Trash2, Calendar as CalIcon, Filter, Clock, MoreVertical, Edit, Play, ChevronUp, CheckCircle2, Pencil } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import Link from 'next/link';
 
 export default function CalendarPage() {
   const [content, setContent] = useState<ContentItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(false);
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [mounted, setMounted] = useState(false);
+  const { userMetadata } = useAuth();
 
   useEffect(() => {
     setMounted(true);
     const fetchData = async () => {
-      const allContent = await getContent();
-      const activeContent = allContent.filter(c => c.status !== 'posted');
-      setContent(activeContent.sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0)));
-      setAccounts(await getAccounts());
+      if (!userMetadata) return;
+      setLoading(true);
+      try {
+        const allContent = await getContent(userMetadata.uid);
+        const activeContent = allContent.filter(c => c.status !== 'posted');
+        setContent(activeContent.sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0)));
+        setAccounts(await getAccounts(userMetadata.uid));
+      } catch (error) {
+        console.error("Calendar fetchData error:", error);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchData();
-  }, []);
+    if (userMetadata) fetchData();
+  }, [userMetadata]);
 
   if (!mounted) return null;
 
@@ -40,17 +52,17 @@ export default function CalendarPage() {
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
+      <header className="responsive-accounts-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 className="heading-font" style={{ fontSize: '2rem', fontWeight: 700 }}>Lịch nội dung</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Quản lý lịch đăng bài và sao chép nhanh nội dung.</p>
+          <h1 className="heading-font responsive-title" style={{ fontWeight: 700 }}>Lịch nội dung</h1>
+          <p className="responsive-subtitle" style={{ color: 'var(--text-secondary)' }}>Quản lý lịch đăng bài và sao chép nhanh nội dung.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+        <div style={{ display: 'flex', gap: 'var(--spacing-md)', width: 'auto' }}>
           <select 
             value={filterPlatform}
             onChange={e => setFilterPlatform(e.target.value)}
-            style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)', backgroundColor: 'var(--bg-secondary)', color: 'white' }}
+            style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)', backgroundColor: 'var(--bg-secondary)', color: 'white', outline: 'none' }}
           >
             <option value="all">Tất cả nền tảng</option>
             <option value="tiktok">TikTok</option>
@@ -60,7 +72,8 @@ export default function CalendarPage() {
         </div>
       </header>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)', position: 'relative' }}>
+        {loading && <div className="nano-bar"></div>}
         {['tiktok', 'facebook', 'threads', 'other'].map(platform => {
           const platformContent = filteredContent.filter(c => c.platform === platform);
           if (platformContent.length === 0 && filterPlatform !== 'all') return null;
@@ -88,14 +101,18 @@ export default function CalendarPage() {
                     onDelete={async (id) => {
                       if (confirm('Bạn có chắc chắn muốn xóa bài viết này?')) {
                         await deleteContent(id);
-                        const allContent = await getContent();
-                        setContent(allContent.filter(c => c.status !== 'posted'));
+                        if (userMetadata) {
+                          const allContent = await getContent(userMetadata.uid);
+                          setContent(allContent.filter(c => c.status !== 'posted'));
+                        }
                       }
                     }}
                     onMarkAsPosted={async (id) => {
                       await markAsPosted(id);
-                      const allContent = await getContent();
-                      setContent(allContent.filter(c => c.status !== 'posted'));
+                      if (userMetadata) {
+                        const allContent = await getContent(userMetadata.uid);
+                        setContent(allContent.filter(c => c.status !== 'posted'));
+                      }
                     }}
                   />
                 ))}
@@ -121,14 +138,14 @@ function ContentCard({ item, accountName, onCopy, onDelete, onMarkAsPosted }: { 
   
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <div className="glass glass-card" style={{ display: 'grid', gridTemplateColumns: '100px 1fr 200px', alignItems: 'center', gap: 'var(--spacing-lg)' }}>
+      <div className="glass glass-card responsive-calendar-card">
         {/* Time/Status Column */}
-        <div style={{ textAlign: 'center', borderRight: '1px solid var(--glass-border)', paddingRight: 'var(--spacing-lg)' }}>
-          <p style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-secondary)' }}>
+        <div className="time-column" style={{ textAlign: 'center', borderRight: '1px solid var(--glass-border)', paddingRight: 'var(--spacing-lg)' }}>
+          <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent-secondary)' }}>
             {item.scheduledAt ? new Date(item.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---'}
           </p>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginTop: '4px' }}>
-            {item.scheduledAt ? new Date(item.scheduledAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Bản nháp'}
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginTop: '4px' }}>
+            {item.scheduledAt ? new Date(item.scheduledAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '---'}
           </p>
         </div>
 
@@ -152,7 +169,7 @@ function ContentCard({ item, accountName, onCopy, onDelete, onMarkAsPosted }: { 
         </div>
 
         {/* Action Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+        <div className="action-column" style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             {item.mediaUrl && (
               <button 
@@ -174,6 +191,24 @@ function ContentCard({ item, accountName, onCopy, onDelete, onMarkAsPosted }: { 
               </button>
             )}
             
+            <Link 
+              href={`/editor?id=${item.id}`}
+              className="glass"
+              style={{ 
+                padding: '10px', 
+                borderRadius: '10px', 
+                color: 'var(--accent-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.85rem',
+                fontWeight: 600
+              }}
+              title="Chỉnh sửa bài đăng"
+            >
+              <Pencil size={16} /> <span className="hidden-mobile">Sửa</span>
+            </Link>
+
             <button 
               onClick={() => onCopy(item.body)}
               className="glass"

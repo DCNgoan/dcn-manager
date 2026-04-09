@@ -6,7 +6,8 @@ import {
   deleteDoc, 
   doc, 
   query, 
-  orderBy 
+  orderBy,
+  where 
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -14,6 +15,7 @@ export type Platform = 'tiktok' | 'facebook' | 'threads' | 'other';
 
 export interface Account {
   id: string;
+  userId: string; // Linked to User UID
   name: string;
   platform: Platform;
   status: 'active' | 'warning' | 'banned';
@@ -28,17 +30,29 @@ export interface Account {
 
 const COLLECTION_NAME = 'accounts';
 
-export const getAccounts = async (): Promise<Account[]> => {
+export const getAccounts = async (userId?: string): Promise<Account[]> => {
   try {
-    const q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
+    let q;
+    if (userId) {
+      // Temporarily removed orderBy to fix missing index error for new users
+      q = query(
+        collection(db, COLLECTION_NAME), 
+        where("userId", "==", userId)
+      );
+    } else {
+      q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
+    }
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const results = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Account[];
+    
+    // Sort manually in memory for now to avoid index error
+    return results.sort((a, b) => b.createdAt - a.createdAt);
   } catch (error) {
-    console.error("Error fetching accounts from Firebase:", error);
-    return [];
+    console.error("Error fetching accounts:", error);
+    throw error; // Throw so UI can alert
   }
 };
 

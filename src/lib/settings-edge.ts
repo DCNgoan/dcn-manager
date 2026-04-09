@@ -8,11 +8,9 @@ export interface AppSettings {
 }
 
 const COLLECTION_NAME = 'settings';
-const DOCUMENT_ID = 'app_settings';
-
-export const getSettingsEdge = async (): Promise<AppSettings> => {
+export const getSettingsEdge = async (userId: string = 'app_settings'): Promise<AppSettings> => {
   try {
-    const docRef = doc(db, COLLECTION_NAME, DOCUMENT_ID);
+    const docRef = doc(db, COLLECTION_NAME, userId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       return docSnap.data() as AppSettings;

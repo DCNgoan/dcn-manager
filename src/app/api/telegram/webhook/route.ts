@@ -10,9 +10,6 @@ export async function POST(req: NextRequest) {
     console.log('--- TELEGRAM WEBHOOK INCOMING ---');
     console.log('Body:', JSON.stringify(body));
 
-    const settings = await getSettingsEdge();
-    const token = settings.telegramToken;
-    
     if (body.callback_query) {
       const callbackQueryId = body.callback_query.id;
       const callbackData = body.callback_query.data;
@@ -21,11 +18,19 @@ export async function POST(req: NextRequest) {
       const messageId = message.message_id;
 
       // 1. NGẮT VÒNG XOAY TRÊN TELEGRAM NGAY LẬP TỨC
+      
+      const parts = callbackData.split(':');
+      const action = parts[0];
+      const itemId = parts[1];
+      const userId = parts[2] || 'app_settings';
+
+      const settings = await getSettingsEdge(userId);
+      const token = settings.telegramToken;
+
       await answerCallbackQuery(callbackQueryId, "⌛ Đang xử lý...", token);
 
-      if (callbackData.startsWith('confirm_posted:')) {
-        const itemId = callbackData.split(':')[1];
-        console.log(`Processing confirmation (Edge) for item: ${itemId}`);
+      if (action === 'confirm_posted') {
+        console.log(`Processing confirmation (Edge) for item: ${itemId} by user: ${userId}`);
         
         try {
           const result = await markAsPostedEdge(itemId);
@@ -47,10 +52,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (callbackData.startsWith('remind_later:')) {
-        const itemId = callbackData.split(':')[1];
+      if (action === 'remind_later') {
         const newTime = Date.now() + 5 * 60 * 1000;
-        console.log(`Processing delay (Edge) for item: ${itemId}`);
+        console.log(`Processing delay (Edge) for item: ${itemId} by user: ${userId}`);
 
         try {
           const updated = await updateContentEdge(itemId, { scheduledAt: newTime });

@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { getSettings, saveSettings, type AppSettings } from '@/lib/settings';
 import { Save, Key, ShieldCheck, Info, ExternalLink, CheckCircle2, Zap, Trash2, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsPage() {
+  const { userMetadata } = useAuth();
   const [settings, setSettings] = useState<AppSettings>({
     geminiKey: '',
     openaiKey: '',
@@ -23,20 +25,22 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMounted(true);
+    if (!userMetadata) return;
     const fetchSettings = async () => {
-      const data = await getSettings();
+      const data = await getSettings(userMetadata.uid);
       setSettings(prev => ({ ...prev, ...data }));
     };
     fetchSettings();
-  }, []);
+  }, [userMetadata]);
 
   if (!mounted) return null;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userMetadata) return;
     setIsSaving(true);
     try {
-      await saveSettings(settings);
+      await saveSettings(userMetadata.uid, settings);
       
       // Automatically setup webhook using current origin if Telegram is configured
       if (settings.telegramToken) {
@@ -86,8 +90,8 @@ export default function SettingsPage() {
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto' }}>
       <header style={{ marginBottom: 'var(--spacing-xl)' }}>
-        <h1 className="heading-font" style={{ fontSize: '2rem', fontWeight: 700 }}>Cài đặt & Tích hợp</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Quản lý các mã API và thông tin bảo mật của bạn.</p>
+        <h1 className="heading-font" style={{ fontWeight: 700, fontSize: 'clamp(1.5rem, 5vw, 2rem)' }}>Cài đặt & Tích hợp</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'clamp(0.85rem, 2vw, 1rem)' }}>Quản lý các mã API và thông tin bảo mật của bạn.</p>
       </header>
 
       <div className="glass glass-card" style={{ marginBottom: 'var(--spacing-xl)', borderLeft: '4px solid var(--accent-secondary)' }}>
@@ -131,7 +135,7 @@ export default function SettingsPage() {
             </ol>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+          <div className="input-group" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '16px' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Mã Bot Token (Lấy từ @BotFather):</label>
               <input 
@@ -152,7 +156,7 @@ export default function SettingsPage() {
             
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Telegram Chat ID:</label>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="input-with-button" style={{ display: 'flex', gap: '12px' }}>
                 <input 
                   type="text" 
                   placeholder="Ví dụ: 123456789"
@@ -171,14 +175,17 @@ export default function SettingsPage() {
                   type="button"
                   onClick={testTelegram}
                   disabled={isTesting || !settings.telegramToken || !settings.telegramChatId}
+                  className="test-btn"
                   style={{ padding: '0 20px', borderRadius: '10px', backgroundColor: 'rgba(0, 136, 204, 0.2)', color: '#0088cc', border: '1px solid rgba(0, 136, 204, 0.3)', fontSize: '0.85rem', fontWeight: 600 }}
                 >
-                  {isTesting ? 'Đang gửi...' : 'Test Connection'}
+                  {isTesting ? '...' : (
+                    <span className="hidden-mobile">Test Connection</span>
+                  )}
+                  <span className="visible-mobile">Test</span>
                 </button>
               </div>
             </div>
           </div>
-
         </section>
 
         {/* Gemini API Key */}

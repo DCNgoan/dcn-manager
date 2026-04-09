@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { getContent, deleteContent, markAsPosted, type ContentItem, type ContentStatus } from '@/lib/content';
 import { getAccounts, type Account } from '@/lib/accounts';
-import { Search, Filter, Calendar, CheckCircle2, FileText, Trash2, ExternalLink, User, Layers } from 'lucide-react';
+import { Search, Filter, Calendar, CheckCircle2, FileText, Trash2, ExternalLink, User, Layers, Pencil } from 'lucide-react';
 import MediaPreview from '@/components/MediaPreview';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { useConfirm } from '@/contexts/ConfirmContext';
 
 export default function LibraryPage() {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -16,20 +18,23 @@ export default function LibraryPage() {
   const [accountFilter, setAccountFilter] = useState<string | 'all'>('all');
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const { userMetadata } = useAuth();
+  const { confirm } = useConfirm();
 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
-    refreshData();
-  }, []);
+    if (userMetadata) refreshData();
+  }, [userMetadata]);
 
   const refreshData = async () => {
+    if (!userMetadata) return;
     setLoading(true);
     try {
-      const contentData = await getContent();
+      const contentData = await getContent(userMetadata.uid);
       setItems(contentData.sort((a, b) => b.createdAt - a.createdAt));
-      const accountsData = await getAccounts();
+      const accountsData = await getAccounts(userMetadata.uid);
       setAccounts(accountsData);
     } catch (error) {
       console.error("Failed to refresh data", error);
@@ -39,7 +44,15 @@ export default function LibraryPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa bài viết này vĩnh viễn?')) {
+    const isConfirmed = await confirm({
+      title: 'Xác nhận xóa bài',
+      message: 'Bạn có chắc chắn muốn xóa bài viết này vĩnh viễn? Hành động này không thể hoàn tác.',
+      confirmLabel: 'Xóa vĩnh viễn',
+      cancelLabel: 'Giữ lại',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
       await deleteContent(id);
       await refreshData();
     }
@@ -63,16 +76,14 @@ export default function LibraryPage() {
 
   const getStatusColor = (status: ContentStatus) => {
     switch (status) {
-      case 'draft': return 'var(--text-secondary)';
       case 'scheduled': return 'var(--accent-primary)';
       case 'posted': return 'var(--color-tiktok-cyan)';
-      default: return 'white';
+      default: return 'var(--text-secondary)';
     }
   };
 
   const getStatusLabel = (status: ContentStatus) => {
     switch (status) {
-      case 'draft': return 'Bản nháp';
       case 'scheduled': return 'Đã đặt lịch';
       case 'posted': return 'Đã đăng bài';
       default: return status;
@@ -81,76 +92,77 @@ export default function LibraryPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <header className="responsive-accounts-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 className="heading-font" style={{ fontSize: '2rem', fontWeight: 700 }}>Kho Nội Dung</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Quản lý, tìm kiếm và lưu trữ toàn bộ bài viết của bạn.</p>
+          <h1 className="heading-font" style={{ fontWeight: 700, fontSize: 'clamp(1.5rem, 5vw, 2rem)' }}>Kho Nội Dung</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'clamp(0.85rem, 2vw, 1rem)' }}>Quản lý, tìm kiếm và lưu trữ bài viết.</p>
         </div>
-        <Link href="/editor" className="glass" style={{ padding: '12px 24px', borderRadius: '12px', backgroundColor: 'var(--accent-primary)', color: 'white', fontWeight: 600 }}>+ Viết bài mới</Link>
+        <Link href="/editor" className="add-acc-btn glass" style={{ padding: '12px 24px', borderRadius: '12px', backgroundColor: 'var(--accent-primary)', color: 'white', fontWeight: 600, textAlign: 'center' }}>+ Viết bài mới</Link>
       </header>
 
       {/* Filters Bar */}
-      <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: '20px', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
-        <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
+      <div className="glass" style={{ padding: 'var(--spacing-md)', borderRadius: '20px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+        <div style={{ flex: '2 1 300px', position: 'relative' }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input 
             type="text" 
-            placeholder="Tìm kiếm tiêu đề hoặc nội dung..." 
+            placeholder="Tìm bài viết..." 
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '10px 10px 10px 40px', borderRadius: '12px', border: '1px solid var(--glass-border)', backgroundColor: 'rgba(255,255,255,0.03)', color: 'white' }}
+            style={{ width: '100%', padding: '10px 10px 10px 40px', borderRadius: '12px', border: '1px solid var(--glass-border)', backgroundColor: 'rgba(255,255,255,0.03)', color: 'white', outline: 'none' }}
           />
         </div>
         
-        <select 
-          value={statusFilter} 
-          onChange={e => setStatusFilter(e.target.value as any)}
-          className="glass"
-          style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)', color: 'white', backgroundColor: 'transparent' }}
-        >
-          <option value="all" style={{ backgroundColor: '#0f172a' }}>Tất cả trạng thái</option>
-          <option value="draft" style={{ backgroundColor: '#0f172a' }}>Bản nháp</option>
-          <option value="scheduled" style={{ backgroundColor: '#0f172a' }}>Đã đặt lịch</option>
-          <option value="posted" style={{ backgroundColor: '#0f172a' }}>Đã đăng</option>
-        </select>
+        <div className="filter-group" style={{ display: 'flex', flex: '1 1 auto', gap: '12px', flexWrap: 'wrap' }}>
+          <select 
+            value={statusFilter} 
+            onChange={e => setStatusFilter(e.target.value as any)}
+            className="glass custom-select"
+            style={{ flex: 1, minWidth: '120px', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--glass-border)', color: 'white', backgroundColor: 'transparent', outline: 'none' }}
+          >
+            <option value="all" style={{ backgroundColor: '#1a1b26' }}>Mọi trạng thái</option>
+            <option value="scheduled" style={{ backgroundColor: '#1a1b26' }}>Đã lên lịch</option>
+            <option value="posted" style={{ backgroundColor: '#1a1b26' }}>Đã đăng</option>
+          </select>
 
-        <select 
-          value={platformFilter} 
-          onChange={e => setPlatformFilter(e.target.value)}
-          className="glass"
-          style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)', color: 'white', backgroundColor: 'transparent' }}
-        >
-          <option value="all" style={{ backgroundColor: '#0f172a' }}>Tất cả nền tảng</option>
-          <option value="tiktok" style={{ backgroundColor: '#0f172a' }}>TikTok</option>
-          <option value="facebook" style={{ backgroundColor: '#0f172a' }}>Facebook</option>
-          <option value="threads" style={{ backgroundColor: '#0f172a' }}>Threads</option>
-        </select>
+          <select 
+            value={platformFilter} 
+            onChange={e => setPlatformFilter(e.target.value)}
+            className="glass custom-select"
+            style={{ flex: 1, minWidth: '120px', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--glass-border)', color: 'white', backgroundColor: 'transparent', outline: 'none' }}
+          >
+            <option value="all" style={{ backgroundColor: '#1a1b26' }}>Mọi nền tảng</option>
+            <option value="tiktok" style={{ backgroundColor: '#1a1b26' }}>TikTok</option>
+            <option value="facebook" style={{ backgroundColor: '#1a1b26' }}>Facebook</option>
+            <option value="threads" style={{ backgroundColor: '#1a1b26' }}>Threads</option>
+          </select>
 
-        <select 
-          value={accountFilter} 
-          onChange={e => setAccountFilter(e.target.value)}
-          className="glass"
-          style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)', color: 'white', backgroundColor: 'transparent' }}
-        >
-          <option value="all" style={{ backgroundColor: '#0f172a' }}>Tất cả tài khoản</option>
-          {accounts.map(acc => (
-            <option key={acc.id} value={acc.id} style={{ backgroundColor: '#0f172a' }}>{acc.name}</option>
-          ))}
-        </select>
+          <select 
+            value={accountFilter} 
+            onChange={e => setAccountFilter(e.target.value)}
+            className="glass custom-select"
+            style={{ flex: 1, minWidth: '120px', padding: '10px 12px', borderRadius: '12px', border: '1px solid var(--glass-border)', color: 'white', backgroundColor: 'transparent', outline: 'none' }}
+          >
+            <option value="all" style={{ backgroundColor: '#1a1b26' }}>Mọi tài khoản</option>
+            {accounts.map(acc => (
+              <option key={acc.id} value={acc.id} style={{ backgroundColor: '#1a1b26' }}>{acc.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Grid List */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 'var(--spacing-lg)' }}>
-        {loading ? (
-          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px' }}>
-             <div className="spin" style={{ display: 'inline-block', marginBottom: '16px' }}>
-                <Layers size={32} />
-             </div>
-             <p>Đang tải nội dung từ Firebase...</p>
-          </div>
-        ) : filteredItems.map(item => {
-          const account = accounts.find(a => a.id === item.accountId);
-          return (
+      <div style={{ position: 'relative' }}>
+        {loading && <div className="nano-bar"></div>}
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--spacing-lg)' }}>
+          {!loading && filteredItems.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px', color: 'var(--text-secondary)' }}>
+              Không có nội dung nào được tìm thấy.
+            </div>
+          ) : filteredItems.map(item => {
+            const account = accounts.find(a => a.id === item.accountId);
+            return (
             <div key={item.id} className="glass glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: `4px solid ${getStatusColor(item.status)}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 800, color: getStatusColor(item.status), letterSpacing: '0.05em' }}>
@@ -197,6 +209,14 @@ export default function LibraryPage() {
 
               <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', gap: '10px' }}>
+                  <Link 
+                    href={`/editor?id=${item.id}`}
+                    className="icon-button" 
+                    title="Chỉnh sửa bài viết"
+                    style={{ color: 'var(--accent-primary)' }}
+                  >
+                    <Pencil size={18} />
+                  </Link>
                   <button 
                     onClick={() => handleDelete(item.id)}
                     className="icon-button" 
@@ -226,9 +246,10 @@ export default function LibraryPage() {
             </div>
           );
         })}
+        </div>
       </div>
 
-      {filteredItems.length === 0 && (
+      {!loading && filteredItems.length === 0 && (
         <div className="glass" style={{ padding: '60px', borderRadius: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
           <FileText size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
           <p>Không tìm thấy bài viết nào phù hợp.</p>

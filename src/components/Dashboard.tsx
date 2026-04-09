@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useEffect, useState } from "react";
-import { getContent, ContentItem, markAsPosted } from "@/lib/content";
+import { getContent, ContentItem, markAsPosted, updateContent } from "@/lib/content";
 import { getAccounts, Account, saveAccount } from "@/lib/accounts";
 import { saveContent } from "@/lib/content";
 import MediaPreview from "@/components/MediaPreview";
 import { Play, Image as ImageIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
+  const { userMetadata } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [stats, setStats] = useState({
     totalPosts: 0,
@@ -17,51 +19,77 @@ export default function Dashboard() {
   });
   const [recentContent, setRecentContent] = useState<ContentItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    if (!userMetadata) return;
+
     const initData = async () => {
-      const currentAccounts = await getAccounts();
-      const currentContent = await getContent();
+      setLoading(true);
+      try {
+        const currentAccounts = await getAccounts(userMetadata.uid);
+        const currentContent = await getContent(userMetadata.uid);
 
-      if (currentAccounts.length === 0 && currentContent.length === 0) {
-        const acc1 = await saveAccount({ name: 'TikTok_Acc_01', platform: 'tiktok', status: 'active' });
-        const acc2 = await saveAccount({ name: 'FB_Page_Business', platform: 'facebook', status: 'warning' });
-        const acc3 = await saveAccount({ name: 'Threads_Global', platform: 'threads', status: 'active' });
-
-        await saveContent({
-          title: 'DCN - Cách Scale Ads TikTok',
-          body: 'Nội dung mẫu về TikTok Ads...',
-          platform: 'tiktok',
-          accountId: acc1.id,
-          status: 'scheduled',
-          scheduledAt: Date.now() + 7200000 
-        });
-
-        await saveContent({
-          title: 'Facebook Reels - Viral Hacks 2024',
-          body: 'Nội dung mẫu về Facebook Reels...',
-          platform: 'facebook',
-          accountId: acc2.id,
-          status: 'draft'
-        });
-
-        await saveContent({
-          title: 'Chiến lược Threads cho MMO',
-          body: 'Nội dung mẫu về Threads...',
-          platform: 'threads',
-          accountId: acc3.id,
-          status: 'posted'
-        });
+        if (currentAccounts.length === 0 && currentContent.length === 0) {
+          const acc1 = await saveAccount({ name: 'TikTok_Acc_01', platform: 'tiktok', status: 'active', userId: userMetadata.uid });
+          const acc2 = await saveAccount({ name: 'FB_Page_Business', platform: 'facebook', status: 'warning', userId: userMetadata.uid });
+          const acc3 = await saveAccount({ name: 'Threads_Global', platform: 'threads', status: 'active', userId: userMetadata.uid });
+    
+          await saveContent({
+            title: 'DCN - Cách Scale Ads TikTok',
+            body: 'Nội dung mẫu về TikTok Ads...',
+            platform: 'tiktok',
+            accountId: acc1.id,
+            status: 'scheduled',
+            scheduledAt: Date.now() + 7200000,
+            userId: userMetadata.uid
+          });
+  
+          await saveContent({
+            title: 'Facebook Reels - Viral Hacks 2024',
+            body: 'Nội dung mẫu về Facebook Reels...',
+            platform: 'facebook',
+            accountId: acc2.id,
+            status: 'scheduled',
+            scheduledAt: Date.now() + 3600000,
+            userId: userMetadata.uid
+          });
+  
+          await saveContent({
+            title: 'Chiến lược Threads cho MMO',
+            body: 'Nội dung mẫu về Threads...',
+            platform: 'threads',
+            accountId: acc3.id,
+            status: 'posted',
+            userId: userMetadata.uid
+          });
+        } else {
+          // Migration logic: convert any existing drafts to scheduled
+          const drafts = currentContent.filter(c => c.status === 'draft');
+          if (drafts.length > 0) {
+            console.log(`Migrating ${drafts.length} drafts to scheduled...`);
+            for (const draft of drafts) {
+              await updateContent(draft.id, { 
+                status: 'scheduled', 
+                scheduledAt: draft.scheduledAt || draft.createdAt || Date.now() 
+              });
+            }
+          }
+        }
+        await refreshData(userMetadata.uid);
+      } catch (error: any) {
+        console.error("Dashboard Init Error:", error);
+      } finally {
+        setLoading(false);
       }
-      await refreshData();
     };
-    initData();
-  }, []);
-
-  const refreshData = async () => {
-    const allContent = await getContent();
-    const allAccounts = await getAccounts();
+      initData();
+    }, [userMetadata]);
+  
+    const refreshData = async (uid: string) => {
+      const allContent = await getContent(uid);
+      const allAccounts = await getAccounts(uid);
 
     const today = new Date().setHours(0, 0, 0, 0);
     const tomorrow = new Date().setHours(24, 0, 0, 0);
@@ -87,25 +115,26 @@ export default function Dashboard() {
   if (!mounted) return null;
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
+      {loading && <div className="nano-bar"></div>}
       <header style={{ marginBottom: 'var(--spacing-xl)', position: 'relative' }}>
-        <h1 className="heading-font" style={{ fontSize: '2.5rem', fontWeight: 700, marginBottom: 'var(--spacing-sm)' }}>
+        <h1 className="heading-font responsive-title" style={{ fontWeight: 700, marginBottom: 'var(--spacing-sm)' }}>
           Chào mừng trở lại, <span style={{ color: 'var(--accent-primary)' }}>Nắm vùng MMO</span>
         </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+        <p className="responsive-subtitle" style={{ color: 'var(--text-secondary)' }}>
           Dưới đây là tổng quan các tài khoản của bạn hôm nay.
         </p>
       </header>
 
       {/* Stats Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)' }}>
+      <div className="responsive-grid-stats" style={{ marginBottom: 'var(--spacing-xl)' }}>
         <StatCard label="Tổng bài đăng" value={stats.totalPosts.toString()} platform="all" />
         <StatCard label="Lên lịch hôm nay" value={stats.scheduledToday.toString()} platform="all" />
         <StatCard label="Tài khoản TikTok" value={stats.tiktokCount.toString().padStart(2, '0')} platform="tiktok" />
         <StatCard label="FB/Threads" value={stats.fbThreadsCount.toString().padStart(2, '0')} platform="facebook" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--spacing-xl)' }}>
+      <div className="responsive-grid-2">
         {/* Recent Activity */}
         <section className="glass glass-card">
           <h2 className="heading-font" style={{ marginBottom: 'var(--spacing-lg)' }}>Nội dung gần đây</h2>
@@ -117,12 +146,12 @@ export default function Dashboard() {
                 title={item.title} 
                 platform={item.platform} 
                 time={formatTimeAgo(item.createdAt)} 
-                status={item.status === 'scheduled' ? 'Đã lên lịch' : item.status === 'draft' ? 'Bản nháp' : 'Đã đăng'} 
+                status={item.status === 'scheduled' ? 'Đã lên lịch' : 'Đã đăng'} 
                 isPosted={item.status === 'posted'}
                 mediaUrl={item.mediaUrl}
                 onMarkAsPosted={async (id) => {
                   await markAsPosted(id);
-                  await refreshData();
+                  if (userMetadata) await refreshData(userMetadata.uid);
                 }}
               />
             )) : (

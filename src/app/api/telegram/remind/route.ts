@@ -1,19 +1,22 @@
 import { NextResponse } from 'next/server';
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 import { sendPostReminder } from '@/lib/telegram';
 import { getSettings } from '@/lib/settings';
 
 export async function POST(request: Request) {
   try {
-    const { chatId, item } = await request.json();
-    const settings = await getSettings();
+    const { chatId, item, userId } = await request.json();
+    if (!userId) {
+       return NextResponse.json({ success: false, error: 'Missing userId' });
+    }
+    const settings = await getSettings(userId);
     const token = settings.telegramToken;
     
     if (!chatId || !item) {
       return NextResponse.json({ success: false, error: 'Missing data' });
     }
 
-    const result = await sendPostReminder(chatId, item, token);
+    const result = await sendPostReminder(chatId, item, token, userId);
 
     if (result && result.ok) {
       return NextResponse.json({ success: true });

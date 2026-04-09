@@ -5,8 +5,10 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
+  getDoc,
   query, 
-  orderBy 
+  orderBy,
+  where 
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { Platform } from './accounts';
@@ -15,6 +17,7 @@ export type ContentStatus = 'draft' | 'scheduled' | 'posted';
 
 export interface ContentItem {
   id: string;
+  userId: string; // Linked to User UID
   title: string;
   body: string;
   platform: Platform;
@@ -28,30 +31,52 @@ export interface ContentItem {
 
 const COLLECTION_NAME = 'content';
 
-export const getContent = async (): Promise<ContentItem[]> => {
-  const fetchPromise = (async () => {
-    const q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+export const getContent = async (userId?: string): Promise<ContentItem[]> => {
+  try {
+    let q;
+    if (userId) {
+      // Temporarily removed orderBy to fix missing index error
+      q = query(
+        collection(db, COLLECTION_NAME), 
+        where("userId", "==", userId)
+      );
+    } else {
+      q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
+    }
+    
+    const fetchPromise = getDocs(q);
+    const timeoutPromise = new Promise<any>((_, reject) => 
+      setTimeout(() => reject(new Error("Timeout: Firebase không phản hồi khi lấy dữ liệu.")), 15000)
+    );
+
+    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise]);
+    const results = querySnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     })) as ContentItem[];
-  })();
 
-  const timeoutPromise = new Promise<ContentItem[]>((_, reject) => 
-    setTimeout(() => reject(new Error("Timeout: Firebase không phản hồi khi lấy dữ liệu.")), 15000)
-  );
-
-  try {
-    return await Promise.race([fetchPromise, timeoutPromise]);
+    // Sort manually in memory to avoid needing index for userId + createdAt
+    return results.sort((a, b) => b.createdAt - a.createdAt);
   } catch (error: any) {
-    if (error.message.includes("Timeout")) {
-      console.warn("[Firebase] GetContent timed out.");
-    } else {
-      console.error("Error fetching content from Firebase:", error);
+    console.error("Error fetching content:", error);
+    if (error.message.includes("permissions")) {
+      throw new Error("Bạn không có quyền truy cập dữ liệu nội dung. Hãy kiểm tra Firestore Rules.");
     }
-    return [];
+    throw error;
   }
+};
+
+export const getContentItem = async (id: string): Promise<ContentItem | null> => {
+  try {
+    const docRef = doc(db, COLLECTION_NAME, id);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as ContentItem;
+    }
+  } catch (error) {
+    console.error("Error fetching single content item:", error);
+  }
+  return null;
 };
 
 export const saveContent = async (item: Omit<ContentItem, 'id' | 'createdAt'>): Promise<ContentItem> => {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 import { getContent, updateContent } from '@/lib/content'; // Assuming these work in API context (server-side)
 // Wait, getContent in lib/content.ts uses localStorage which only works in browser.
 // If we want real notifications in a local Next.js app, we have a challenge: 

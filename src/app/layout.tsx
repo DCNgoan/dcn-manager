@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
 import ClientWrapper from "@/components/ClientWrapper";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ConfirmProvider } from "@/contexts/ConfirmContext";
+import { ToastProvider } from "@/contexts/ToastContext";
 
 export const metadata: Metadata = {
   title: "DCN Content CMS - Phiên bản MMO",
@@ -15,9 +18,15 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <ClientWrapper>
-          {children}
-        </ClientWrapper>
+        <AuthProvider>
+          <ConfirmProvider>
+            <ToastProvider>
+              <ClientWrapper>
+                {children}
+              </ClientWrapper>
+            </ToastProvider>
+          </ConfirmProvider>
+        </AuthProvider>
       </body>
     </html>
   );

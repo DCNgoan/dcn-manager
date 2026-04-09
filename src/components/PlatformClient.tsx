@@ -5,6 +5,7 @@ import { getContent, markAsPosted, deleteContent, type ContentItem } from '@/lib
 import { getAccounts, type Account } from '@/lib/accounts';
 import { useParams } from 'next/navigation';
 import { Copy, ExternalLink, User, Calendar, Clock, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function PlatformClient() {
   const params = useParams();
@@ -13,18 +14,24 @@ export default function PlatformClient() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const { userMetadata } = useAuth();
 
   const refreshData = async () => {
-    const allContent = await getContent();
-    const allAccounts = await getAccounts();
-    setContent(allContent.filter(c => c.platform === platform && c.status !== 'posted'));
-    setAccounts(allAccounts.filter(a => a.platform === platform));
+    if (!userMetadata) return;
+    try {
+      const allContent = await getContent(userMetadata.uid);
+      const allAccounts = await getAccounts(userMetadata.uid);
+      setContent(allContent.filter(c => c.platform === platform && c.status !== 'posted'));
+      setAccounts(allAccounts.filter(a => a.platform === platform));
+    } catch (error) {
+      console.error("PlatformClient refresh error:", error);
+    }
   };
 
   useEffect(() => {
     setMounted(true);
-    refreshData();
-  }, [platform]);
+    if (userMetadata) refreshData();
+  }, [platform, userMetadata]);
 
   if (!mounted) return null;
 
@@ -47,12 +54,12 @@ export default function PlatformClient() {
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-      <header style={{ marginBottom: 'var(--spacing-xl)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span className={`badge badge-${platform}`} style={{ fontSize: '0.9rem', padding: '10px 20px', borderRadius: '14px', fontWeight: 800, textTransform: 'uppercase', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+      <header className="responsive-header" style={{ marginBottom: 'var(--spacing-xl)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <span className={`badge badge-${platform}`} style={{ fontSize: '0.8rem', padding: '8px 16px', borderRadius: '12px', fontWeight: 800, textTransform: 'uppercase', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
             {platform}
           </span>
-          <h1 className="heading-font" style={{ fontSize: '2.2rem', fontWeight: 800 }}>Nội dung {platform === 'facebook' ? 'Facebook' : platform.charAt(0).toUpperCase() + platform.slice(1)}</h1>
+          <h1 className="heading-font responsive-title" style={{ fontWeight: 800 }}>Nội dung {platform === 'facebook' ? 'Facebook' : platform.charAt(0).toUpperCase() + platform.slice(1)}</h1>
         </div>
         
         {selectedAccountId && (
@@ -60,12 +67,12 @@ export default function PlatformClient() {
             onClick={() => setSelectedAccountId(null)}
             style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', background: 'rgba(124, 58, 237, 0.1)', border: '1px solid var(--accent-primary)', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer' }}
           >
-            Hiện tất cả tài khoản
+            Hiện tất cả
           </button>
         )}
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 'var(--spacing-xl)' }}>
+      <div className="responsive-grid-2">
         <section>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: 'var(--spacing-lg)' }}>
             <Calendar size={20} color="var(--text-secondary)" />
@@ -109,37 +116,37 @@ export default function PlatformClient() {
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  <div className="card-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     <button 
                       onClick={() => { navigator.clipboard.writeText(item.body); alert('Đã sao chép nội dung bài viết!'); }}
-                      className="glass" 
-                      style={{ padding: '10px 18px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-tiktok-cyan)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: '1px solid rgba(37, 244, 238, 0.2)' }}
+                      className="glass action-btn" 
+                      style={{ padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-tiktok-cyan)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: '1px solid rgba(37, 244, 238, 0.2)' }}
                     >
-                      <Copy size={16} /> Sao chép
+                      <Copy size={16} /> <span className="hidden-mobile">Sao chép</span>
                     </button>
                     <button 
                       onClick={async () => { await markAsPosted(item.id); await refreshData(); }}
-                      className="glass" 
-                      style={{ padding: '10px 18px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, color: '#00f2ea', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: '1px solid rgba(0, 242, 234, 0.2)' }}
+                      className="glass action-btn" 
+                      style={{ padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600, color: '#00f2ea', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: '1px solid rgba(0, 242, 234, 0.2)' }}
                     >
-                      <CheckCircle size={16} /> Đã đăng
+                      <CheckCircle size={16} /> <span className="hidden-mobile">Đã đăng</span>
                     </button>
                     <button 
                       onClick={async () => { await deleteContent(item.id); await refreshData(); }}
-                      className="glass" 
-                      style={{ padding: '10px 18px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, color: '#ff0050', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: '1px solid rgba(255, 0, 80, 0.2)' }}
+                      className="glass action-btn" 
+                      style={{ padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600, color: '#ff0050', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', border: '1px solid rgba(255, 0, 80, 0.2)' }}
                     >
-                      <Trash2 size={16} /> Xóa
+                      <Trash2 size={16} /> <span className="hidden-mobile">Xóa</span>
                     </button>
                     {item.mediaUrl && (
                       <a 
                         href={item.mediaUrl} 
                         target="_blank" 
                         rel="noreferrer"
-                        className="glass" 
-                        style={{ padding: '10px 18px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-facebook-blue)', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid rgba(24, 119, 242, 0.2)' }}
+                        className="glass action-btn" 
+                        style={{ padding: '8px 14px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-facebook-blue)', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid rgba(24, 119, 242, 0.2)' }}
                       >
-                        <ExternalLink size={16} /> Mở Drive
+                        <ExternalLink size={16} /> <span className="hidden-mobile">Media</span>
                       </a>
                     )}
                   </div>

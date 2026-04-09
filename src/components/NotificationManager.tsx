@@ -5,10 +5,14 @@ import { getContent } from '@/lib/content';
 import { getSettings } from '@/lib/settings';
 
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function NotificationManager() {
+  const { userMetadata } = useAuth();
   const NOTIFIED_KEY = 'dcn_sent_notifications';
   const [logs, setLogs] = useState<string[]>(['🚀 Hệ thống quét bài đã kích hoạt...']);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [showPanel, setShowPanel] = useState(true);
 
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -42,14 +46,13 @@ export default function NotificationManager() {
     };
 
     const check = async () => {
-      if (isChecking.current) {
-        console.log('NotificationManager: Already checking, skipping...');
+      if (isChecking.current || !userMetadata) {
         return;
       }
       isChecking.current = true;
 
       try {
-        const settings = await getSettings();
+        const settings = await getSettings(userMetadata.uid);
         const chatId = settings.telegramChatId;
         const token = settings.telegramToken;
 
@@ -64,7 +67,7 @@ export default function NotificationManager() {
           return;
         }
 
-        const items = await getContent();
+        const items = await getContent(userMetadata.uid);
         const now = Date.now();
         
         // Heartbeat log (reduce frequency)
@@ -83,18 +86,18 @@ export default function NotificationManager() {
         // 2. Identify items to notify
         const toNotify = items.filter(item => 
           item.status === 'scheduled' && 
-          item.scheduledAt && item.scheduledAt <= (now + 5000) && // 5s grace for network
+          item.scheduledAt && item.scheduledAt <= (now + 15 * 60 * 1000) && 
           !notifiedSet.has(item.id)
         );
 
         if (toNotify.length > 0) {
           for (const item of toNotify) {
-            addLog(`📪 Đang gửi Tele: ${item.title.substring(0, 15)}...`);
+            addLog(`🚀 Gửi nhắc lịch (15p): ${item.title.substring(0, 20)}...`);
             try {
               const resp = await fetch('/api/telegram/remind', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId, item })
+                body: JSON.stringify({ chatId, item, userId: userMetadata.uid })
               });
 
               if (resp.ok) {
@@ -130,15 +133,45 @@ export default function NotificationManager() {
       } catch (e) {}
     };
 
-    check();
-    const interval = setInterval(check, 10000); 
-    const syncInterval = setInterval(syncNotifiedList, 60000); 
+    if (userMetadata) {
+      check();
+      const interval = setInterval(check, 10000); 
+      const syncInterval = setInterval(syncNotifiedList, 60000); 
 
-    return () => {
-      clearInterval(interval);
-      clearInterval(syncInterval);
-    };
-  }, []);
+      return () => {
+        clearInterval(interval);
+        clearInterval(syncInterval);
+      };
+    }
+  }, [userMetadata]);
+
+  if (!showPanel) {
+    return (
+      <button 
+        onClick={() => setShowPanel(true)}
+        className="glass"
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          width: '40px',
+          height: '40px',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          cursor: 'pointer',
+          border: '1px solid var(--accent-primary)',
+          color: 'var(--accent-primary)',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
+        }}
+        title="Mở Telegram Engine"
+      >
+        <div className="pulse-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }}></div>
+      </button>
+    );
+  }
 
   return (
     <div style={{
@@ -163,29 +196,26 @@ export default function NotificationManager() {
           <div className="pulse-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }}></div>
           <span style={{ fontWeight: 800, color: 'var(--accent-primary)', letterSpacing: '0.5px' }}>TELEGRAM ENGINE</span>
         </div>
-        <button onClick={() => setLogs(['🔄 Refresh logs...'])} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.9rem' }}>×</button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={() => setIsMinimized(!isMinimized)} style={{ color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }}>
+            {isMinimized ? '+' : '−'}
+          </button>
+          <button onClick={() => setShowPanel(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
+        </div>
       </div>
-      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {logs.map((log, i) => (
-          <div key={i} style={{ 
-            padding: '2px 4px', 
-            borderLeft: `2px solid ${log.includes('✅') ? '#22c55e' : log.includes('❌') ? '#ef4444' : 'rgba(255,255,255,0.2)'}`,
-            color: log.includes('✅') ? '#bbf7d0' : log.includes('❌') ? '#fecaca' : 'inherit'
-          }}>
-            {log}
-          </div>
-        ))}
-      </div>
-      <style jsx>{`
-        .pulse-dot {
-          animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-          70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-        }
-      `}</style>
+      {!isMinimized && (
+        <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {logs.map((log, i) => (
+            <div key={i} style={{ 
+              padding: '2px 4px', 
+              borderLeft: `2px solid ${log.includes('✅') ? '#22c55e' : log.includes('❌') ? '#ef4444' : 'rgba(255,255,255,0.2)'}`,
+              color: log.includes('✅') ? '#bbf7d0' : log.includes('❌') ? '#fecaca' : 'inherit'
+            }}>
+              {log}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
