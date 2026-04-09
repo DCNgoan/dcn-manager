@@ -42,112 +42,97 @@ export default function NotificationManager() {
     };
 
     const check = async () => {
-      if (isChecking.current) return;
+      if (isChecking.current) {
+        console.log('NotificationManager: Already checking, skipping...');
+        return;
+      }
       isChecking.current = true;
 
       try {
-        const items = await getContent();
         const settings = await getSettings();
         const chatId = settings.telegramChatId;
+        const token = settings.telegramToken;
 
-        // Chạy cleanup mỗi lần check
-        await cleanupOldPosts(items, settings);
-
-        if (!chatId) {
-          if (logs.length <= 1) addLog('⚠️ Chưa cấu hình Chat ID trong Cài đặt.');
-          console.log('NotificationManager: Settings from Firestore:', settings);
-          return;
-        } else {
-          // Chỉ hiện log thành công 1 lần duy nhất khi vừa khởi động
-          if (logs.length <= 1) {
-            addLog(`✅ Đã nhận Chat ID: ${chatId.substring(0, 4)}***`);
-            if (settings.telegramToken) {
-              addLog(`🤖 Bot Token đã sẵn sàng.`);
-            }
-          }
+        // Startup logs
+        if (logs.length <= 1) {
+          if (!chatId) addLog('⚠️ Chưa cấu hình Chat ID.');
+          else addLog(`✅ Hệ thống sẵn sàng (ID: ${chatId.substring(0, 4)}***)`);
         }
 
-        // Lấy danh sách đã gửi
+        if (!chatId || !token) {
+          isChecking.current = false;
+          return;
+        }
+
+        const items = await getContent();
+        const now = Date.now();
+        
+        // Heartbeat log (reduce frequency)
+        if (Math.random() > 0.9) {
+          addLog('💓 Hệ thống vẫn đang thức...');
+        }
+
+        // 1. Get notified list
         let notifiedIds: string[] = [];
         try {
           const stored = localStorage.getItem(NOTIFIED_KEY);
           notifiedIds = stored ? JSON.parse(stored) : [];
         } catch (e) { notifiedIds = []; }
-        
         const notifiedSet = new Set(notifiedIds);
-        
-        const now = Date.now();
-        const scheduledItems = items.filter(item => item.status === 'scheduled' && item.scheduledAt);
-        
-        // Log status if we have scheduled items
-        if (scheduledItems.length > 0 && Math.random() > 0.7) { 
-           const nextItem = [...scheduledItems].sort((a,b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))[0];
-           if (nextItem.scheduledAt && nextItem.scheduledAt > now) {
-             const diff = Math.ceil((nextItem.scheduledAt - now) / 1000);
-             addLog(`🕒 Đợi bài tiếp theo: ${diff}s nữa...`);
-           }
-        }
 
-        const toNotify = scheduledItems.filter(item => 
-          item.scheduledAt! <= now &&
+        // 2. Identify items to notify
+        const toNotify = items.filter(item => 
+          item.status === 'scheduled' && 
+          item.scheduledAt && item.scheduledAt <= (now + 5000) && // 5s grace for network
           !notifiedSet.has(item.id)
         );
 
-        if (toNotify.length === 0) return;
+        if (toNotify.length > 0) {
+          for (const item of toNotify) {
+            addLog(`📪 Đang gửi Tele: ${item.title.substring(0, 15)}...`);
+            try {
+              const resp = await fetch('/api/telegram/remind', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, item })
+              });
 
-        for (const item of toNotify) {
-          addLog(`📪 Đang gửi Tele cho bài: ${item.title.substring(0, 20)}...`);
-          
-          try {
-            const resp = await fetch('/api/telegram/remind', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chatId, item })
-            });
-
-            if (resp.ok) {
-              notifiedSet.add(item.id);
-              localStorage.setItem(NOTIFIED_KEY, JSON.stringify(Array.from(notifiedSet)));
-              addLog(`✅ Thành công: ${item.title.substring(0, 20)}`);
-            } else {
-              const err = await resp.json();
-              addLog(`❌ Lỗi API: ${err.error || 'Unknown'}`);
+              if (resp.ok) {
+                notifiedSet.add(item.id);
+                localStorage.setItem(NOTIFIED_KEY, JSON.stringify(Array.from(notifiedSet)));
+                addLog(`✅ Đã gửi xong bài: ${item.title.substring(0, 15)}`);
+              } else {
+                const err = await resp.json();
+                addLog(`❌ Lỗi API: ${err.error || 'N/A'}`);
+              }
+            } catch (err: any) {
+              addLog(`❌ Lỗi Fetch: ${err.message}`);
             }
-          } catch (error: any) {
-            addLog(`❌ Lỗi kết nối: ${error.message}`);
           }
         }
+      } catch (globalError: any) {
+        addLog(`❌ Lỗi hệ thống: ${globalError.message.substring(0, 30)}`);
       } finally {
         isChecking.current = false;
       }
     };
 
-    // Thêm listener để clear notifiedIds khi có bài mới cập nhật scheduledAt
-    const syncNotifiedList = async () => {
+    // Minor sync logic
+    const syncNotifiedList = () => {
       try {
-        const items = await getContent();
         const stored = localStorage.getItem(NOTIFIED_KEY);
         if (!stored) return;
+        const now = Date.now();
         let notifiedIds: string[] = JSON.parse(stored);
-        const initialCount = notifiedIds.length;
-        
-        notifiedIds = notifiedIds.filter(id => {
-          const item = items.find(i => i.id === id);
-          if (!item) return false; 
-          // Nếu bài viết được dời lịch vào tương lai (> 2 phút từ bây giờ), cho phép nó được thông báo lại
-          if (item.status === 'scheduled' && item.scheduledAt && item.scheduledAt > (Date.now() + 120000)) return false;
-          return true;
-        });
-
-        if (notifiedIds.length !== initialCount) {
-          localStorage.setItem(NOTIFIED_KEY, JSON.stringify(notifiedIds));
+        if (notifiedIds.length > 100) { // Cleanup old IDs from localStorage if too many
+          localStorage.setItem(NOTIFIED_KEY, JSON.stringify(notifiedIds.slice(-50)));
         }
       } catch (e) {}
     };
 
     check();
-    const interval = setInterval(check, 10000); // Kiểm tra mỗi 10 giây cho nhạy
-    const syncInterval = setInterval(syncNotifiedList, 30000); // 30s đồng bộ 1 lần
+    const interval = setInterval(check, 10000); 
+    const syncInterval = setInterval(syncNotifiedList, 60000); 
 
     return () => {
       clearInterval(interval);
