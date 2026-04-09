@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 import { getSettings } from '@/lib/settings';
 import { ADMIN_EMAIL } from '@/lib/users';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';

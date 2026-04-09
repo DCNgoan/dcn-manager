@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 import { getSettings } from '@/lib/settings';
 
 const DEFAULT_TELEGRAM_TOKEN = '8249291269:AAGnxpauMw8hQf7q9FJXTiZi_kJolLs87HI';
