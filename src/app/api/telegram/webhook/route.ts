@@ -22,15 +22,20 @@ export async function POST(req: NextRequest) {
       const parts = callbackData.split(':');
       const action = parts[0];
       const itemId = parts[1];
-      const userId = parts[2] || 'app_settings';
+      const userIdFromCallback = parts[2] || 'app_settings';
+      
+      // If the callback provided 'anon', treat it as 'app_settings' for lookup
+      const effectiveUserId = userIdFromCallback === 'anon' ? 'app_settings' : userIdFromCallback;
 
-      const settings = await getSettingsEdge(userId);
+      console.log(`Processing action: ${action} for item: ${itemId} (User: ${effectiveUserId})`);
+
+      const settings = await getSettingsEdge(effectiveUserId);
       const token = settings.telegramToken;
 
       await answerCallbackQuery(callbackQueryId, "⌛ Đang xử lý...", token);
 
       if (action === 'confirm_posted') {
-        console.log(`Processing confirmation (Edge) for item: ${itemId} by user: ${userId}`);
+        console.log(`Processing confirmation (Edge) for item: ${itemId} by user: ${effectiveUserId}`);
         
         try {
           const result = await markAsPostedEdge(itemId);
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
 
       if (action === 'remind_later') {
         const newTime = Date.now() + 5 * 60 * 1000;
-        console.log(`Processing delay (Edge) for item: ${itemId} by user: ${userId}`);
+        console.log(`Processing delay (Edge) for item: ${itemId} by user: ${effectiveUserId}`);
 
         try {
           const updated = await updateContentEdge(itemId, { scheduledAt: newTime });
