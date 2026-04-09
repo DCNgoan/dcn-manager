@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'edge';
 import { answerCallbackQuery, updateTelegramMessage, sendTelegramMessage } from '@/lib/telegram';
-import { markAsPosted, updateContent, getContent } from '@/lib/content';
-import { getSettings } from '@/lib/settings';
+import { markAsPostedEdge, updateContentEdge } from '@/lib/content-edge';
+import { getSettingsEdge } from '@/lib/settings-edge';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,9 +10,8 @@ export async function POST(req: NextRequest) {
     console.log('--- TELEGRAM WEBHOOK INCOMING ---');
     console.log('Body:', JSON.stringify(body));
 
-    const settings = await getSettings();
+    const settings = await getSettingsEdge();
     const token = settings.telegramToken;
-    const adminChatId = settings.telegramChatId;
     
     if (body.callback_query) {
       const callbackQueryId = body.callback_query.id;
@@ -21,57 +20,54 @@ export async function POST(req: NextRequest) {
       const chatId = message.chat.id.toString();
       const messageId = message.message_id;
 
+      // 1. NGẮT VÒNG XOAY TRÊN TELEGRAM NGAY LẬP TỨC
+      await answerCallbackQuery(callbackQueryId, "⌛ Đang xử lý...", token);
+
       if (callbackData.startsWith('confirm_posted:')) {
         const itemId = callbackData.split(':')[1];
-        console.log(`Processing confirmation for item: ${itemId}`);
+        console.log(`Processing confirmation (Edge) for item: ${itemId}`);
         
         try {
-          const result = await markAsPosted(itemId);
+          const result = await markAsPostedEdge(itemId);
           if (result) {
-            await answerCallbackQuery(callbackQueryId, "✅ Đã xác nhận bài đăng thành công!", token);
-            
-            // 1. Edit current message to show status
+            // 2. Cập nhật tin nhắn để hiện trạng thái
             await updateTelegramMessage(chatId, messageId, 
               `${message.text}\n\n✅ <b>TRẠNG THÁI: ĐÃ ĐĂNG BÀI</b>`,
               token
             );
 
-            // 2. Send a NEW notification message as requested
-            await sendTelegramMessage(chatId, `🎉 <b>Thông báo:</b> Bài viết "${result.title}" đã được xác nhận đăng thành công vào hệ thống!`, undefined, token);
-            
-            console.log(`Successfully confirmed and notified for ${itemId}`);
+            // 3. Gửi tin nhắn thông báo thành công mới
+            await sendTelegramMessage(chatId, `🎉 <b>Thành công:</b> Bài viết "${result.title}" đã được xác nhận đăng xong!`, undefined, token);
+          } else {
+            throw new Error("Không tìm thấy bài viết hoặc cập nhật thất bại.");
           }
         } catch (dbErr: any) {
-          console.error('Database error in confirm_posted:', dbErr);
-          await answerCallbackQuery(callbackQueryId, "❌ Lỗi: " + dbErr.message, token);
-          await sendTelegramMessage(chatId, `❌ <b>Lỗi hệ thống:</b> Không thể cập nhật trạng thái đã đăng cho bài viết này.`, undefined, token);
+          console.error('Edge DB error in confirm_posted:', dbErr);
+          await sendTelegramMessage(chatId, `❌ <b>Lỗi hệ thống (Edge):</b> ${dbErr.message}`, undefined, token);
         }
       }
 
       if (callbackData.startsWith('remind_later:')) {
         const itemId = callbackData.split(':')[1];
         const newTime = Date.now() + 5 * 60 * 1000;
-        console.log(`Processing delay for item: ${itemId} to ${new Date(newTime).toLocaleTimeString()}`);
+        console.log(`Processing delay (Edge) for item: ${itemId}`);
 
         try {
-          const updated = await updateContent(itemId, { scheduledAt: newTime });
+          const updated = await updateContentEdge(itemId, { scheduledAt: newTime });
           if (updated) {
-            await answerCallbackQuery(callbackQueryId, "⏰ Sẽ nhắc lại sau 5 phút!", token);
-            
-            // 1. Edit current message
+            // 1. Cập nhật tin nhắn
             await updateTelegramMessage(chatId, messageId, 
-              `${message.text}\n\n⏰ <b>TRẠNG THÁI: ĐÃ DỜI LỊCH NHẮC SAU 5 PHÚT</b>`,
+              `${message.text}\n\n⏰ <b>TRẠNG THÁI: SẼ NHẮC LẠI SAU 5 PHÚT</b>`,
               token
             );
 
-            // 2. Send a NEW confirmation message
-            await sendTelegramMessage(chatId, `⏰ <b>Đã đặt lại lịch:</b> Hệ thống sẽ nhắc lại bạn vào lúc ${new Date(newTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}.`, undefined, token);
-            
-            console.log(`Successfully rescheduled for ${itemId}`);
+            // 2. Thông báo thời gian nhắc lại mới
+            const timeStr = new Date(newTime).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'});
+            await sendTelegramMessage(chatId, `⏰ <b>Đã dời lịch:</b> Bot sẽ nhắc lại vào lúc ${timeStr}.`, undefined, token);
           }
         } catch (dbErr: any) {
-          console.error('Database error in remind_later:', dbErr);
-          await answerCallbackQuery(callbackQueryId, "❌ Lỗi: " + dbErr.message, token);
+          console.error('Edge DB error in remind_later:', dbErr);
+          await sendTelegramMessage(chatId, `❌ <b>Lỗi hệ thống (Edge):</b> ${dbErr.message}`, undefined, token);
         }
       }
     }
