@@ -132,7 +132,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
       <div className="layout-grid">
         {isSidebarOpen && (
           <div onClick={() => setIsSidebarOpen(false)} style={{
-              position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 1000, backdropFilter: 'blur(8px)',
+              position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, backdropFilter: 'blur(4px)',
               animation: 'fadeIn 0.3s ease-out'
             }} className="visible-mobile" />
         )}

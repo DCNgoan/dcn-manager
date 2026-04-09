@@ -78,6 +78,7 @@ button {
   width: var(--sidebar-width);
   flex-shrink: 0;
   border-right: 1px solid var(--glass-border);
+  transition: transform var(--transition-normal), width var(--transition-normal);
 }
 
 main {
@@ -92,8 +93,19 @@ main {
     padding-top: 60px;
   }
   .sidebar-container {
-    width: 0;
-    border-right: none;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    transform: translateX(-102%);
+    background: var(--bg-primary); /* Solid background on mobile to prevent blur bleed */
+    z-index: 1001;
+    border-right: 1px solid var(--glass-border);
+  }
+  .sidebar-container.open {
+    transform: translateX(0);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.5);
   }
 }
 
@@ -144,6 +156,17 @@ main {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+@media (max-width: 1024px) {
+  .sidebar-inner {
+    height: 100%;
+    background: var(--bg-secondary); /* More opaque background for mobile menu */
+    backdrop-filter: none; /* Disable blur on the element itself on mobile if background is opaque */
+  }
 }
 
 .logo {
