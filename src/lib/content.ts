@@ -29,15 +29,27 @@ export interface ContentItem {
 const COLLECTION_NAME = 'content';
 
 export const getContent = async (): Promise<ContentItem[]> => {
-  try {
+  const fetchPromise = (async () => {
     const q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as ContentItem[];
-  } catch (error) {
-    console.error("Error fetching content from Firebase:", error);
+  })();
+
+  const timeoutPromise = new Promise<ContentItem[]>((_, reject) => 
+    setTimeout(() => reject(new Error("Timeout: Firebase không phản hồi khi lấy dữ liệu.")), 15000)
+  );
+
+  try {
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } catch (error: any) {
+    if (error.message.includes("Timeout")) {
+      console.warn("[Firebase] GetContent timed out.");
+    } else {
+      console.error("Error fetching content from Firebase:", error);
+    }
     return [];
   }
 };
