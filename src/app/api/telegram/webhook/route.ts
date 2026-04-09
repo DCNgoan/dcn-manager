@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     console.log('--- TELEGRAM WEBHOOK INCOMING ---');
-    console.log('Body:', JSON.stringify(body, null, 2));
+    console.log('Body:', JSON.stringify(body));
 
     const settings = await getSettings();
     const token = settings.telegramToken;

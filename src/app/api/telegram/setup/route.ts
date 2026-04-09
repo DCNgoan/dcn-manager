@@ -31,3 +31,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export async function GET() {
+  try {
+    const settings = await getSettings();
+    const token = settings.telegramToken || DEFAULT_TELEGRAM_TOKEN;
+    const response = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+    const result = await response.json();
+    return NextResponse.json(result);
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message });
+  }
+}
